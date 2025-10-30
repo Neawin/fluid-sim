@@ -1,12 +1,18 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, ElementRef, inject, viewChild } from '@angular/core';
+import { WebglManager } from './core/webgl/webgl-manager';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App {
-  protected readonly title = signal('fluid-sim');
+  canvas = viewChild<ElementRef<HTMLCanvasElement>>('fluid');
+  protected readonly webglManager = inject(WebglManager);
+  ngAfterViewInit(): void {
+    const canvas = <HTMLCanvasElement>this.canvas()?.nativeElement;
+    this.webglManager.init(canvas)
+  }
 }
+
