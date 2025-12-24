@@ -64,7 +64,7 @@ export class WebGPUManager {
       colorAttachments: [
         {
           view: this.ctx.getCurrentTexture().createView(),
-          clearValue: [0.3, 0.3, 0.3, 1],
+          clearValue: [0.2, 0.1, 0.1, 1],
           loadOp: 'clear',
           storeOp: 'store',
         },
