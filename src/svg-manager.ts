@@ -49,4 +49,14 @@ export class SVGManager {
     this.root.appendChild(rect);
     this.shapes.push(rect)
   }
+
+  init() {
+    const size = 40;
+    const num = 3;
+    for (let i = 0; i < num; i++) {
+      const x = Math.floor(Math.random() * 1000)
+      const y = Math.floor(Math.random() * 400)
+      this.createRect(x, y, size, size)
+    }
+  }
 }

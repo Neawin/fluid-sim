@@ -1,7 +1,11 @@
-@vertex fn vs(@builtin(vertex_index) vertexIndex : u32) -> vertexIndex {
-  return vertexIndex;
+struct Vertex {
+  @location(0) position : vec2f,
 }
 
-@fragment fn fs(fsInput : VertexShaderOutput) -> @location(0) vec4f {
-  return vec4f(1,1,1,1);
+@vertex fn vs(vert : Vertex) -> @builtin(position) vec4f {
+  return vec4f(vert.position, 0.0, 1.0);
+}
+
+@fragment fn fs() -> @location(0) vec4f {
+  return vec4f(1, 1, 1, 1);
 }
