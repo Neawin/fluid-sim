@@ -1,4 +1,4 @@
-import { run } from "./triangles";
+import { run } from "./shaders";
 import { SVGManager } from "./svg-manager";
 
 function main() {
