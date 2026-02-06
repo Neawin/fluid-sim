@@ -11,12 +11,6 @@ export async function createDisplayPipeline(device: GPUDevice) {
     layout: 'auto',
     vertex: {
       module,
-      buffers: [{
-        arrayStride: 2 * 4,
-        attributes: [
-          { shaderLocation: 0, offset: 0, format: 'float32x2' }
-        ]
-      }]
     },
     fragment: {
       module,

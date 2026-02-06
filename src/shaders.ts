@@ -33,7 +33,8 @@ export async function run() {
 
   // CREATE TEXTURE
   const textureWidth = 24;
-  const textureHeight = 16;
+  const textureHeight = 20;
+
   const data: number[][] = []
   for (let i = 0; i < textureWidth; i++) {
     for (let j = 0; j < textureHeight; j++) {
@@ -106,9 +107,8 @@ export async function run() {
     const pass = encoder.beginRenderPass(renderPassDescriptor);
 
     pass.setPipeline(pipeline);
-    pass.setVertexBuffer(0, pointBuffer);
     pass.setBindGroup(0, bindGroup);
-    pass.draw(3);
+    pass.draw(6);
     pass.end();
 
     const commandBuffer = encoder.finish();

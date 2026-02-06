@@ -9,7 +9,7 @@ function main() {
     throw new Error("svg not found!");
   }
   const svgManager = new SVGManager(svg);
-  svgManager.init()
+  // svgManager.init()
 }
 
 
