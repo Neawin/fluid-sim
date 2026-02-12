@@ -1,4 +1,4 @@
-import { run } from "./shaders";
+import { run } from "./shaders-main";
 import { SVGManager } from "./svg-manager";
 
 function main() {

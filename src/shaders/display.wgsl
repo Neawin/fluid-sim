@@ -1,8 +1,8 @@
+
 struct VertexOut {
   @builtin(position) position : vec4f,
   @location(0) texcoord : vec2f,
 }
-
 
 @vertex fn vs(
 @builtin(vertex_index) vertexIndex : u32
@@ -17,14 +17,9 @@ struct VertexOut {
   );
 
   var vsOut : VertexOut;
-  //-1 to 1
   var xy = pos[vertexIndex];
-  //0 to 2
   var zeroToTwo = xy * 2.0;
-  //0 to 1
   var zeroToOne = zeroToTwo - 1.0;
-
-
 
   vsOut.position = vec4f(xy, 0.0, 1.0);
   vsOut.texcoord = (xy + 1.0) * 0.5;
@@ -42,15 +37,18 @@ struct VertexOut {
 
   let texelcoords = uv * dims;
   let texel = floor(texelcoords);
-  let center = vec2f(0.5, 0.5);
-  let local = texelcoords - texel;
-  let coords = sampled.xy;
+  let center = vec2f(0.0, 0.0);
+  let local = (texelcoords - texel) * 2 - 1;
+  let coords = sampled.xy * 2 - 1;
 
+  return drawLine(center, coords, local);
+}
 
-  let p1p2 = coords - center;
-  let p1p3 = local - center;
+fn drawLine(p1 : vec2f, p2 : vec2f, p3 : vec2f) -> vec4f
+{
+  let p1p2 = p2 - p1;
+  let p1p3 = p3 - p1;
 
-  //calc
   let d1 = dot(p1p2, p1p3);
   //|a|*|b|*cos a = d1
   let cos = d1 / (length(p1p2) * length(p1p3));
@@ -61,7 +59,7 @@ struct VertexOut {
 
   let dist = distance(p1p3, p1p4);
 
-  if (dist <= 0.03 && length(p1p2) >= length(p1p4) && projDistance >=0)
+  if (dist <= 0.01 && length(p1p2) >= length(p1p4) && length(p1p2) > 0.2 && projDistance >=0)
   {
     return vec4f(1.0, 1.0, 1.0, 1.0);
   } else {

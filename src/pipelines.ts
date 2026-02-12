@@ -1,24 +1,58 @@
-import displayModule from "./shaders/display.wgsl"
+import displayModule from "./shaders/display.wgsl";
+import velocityModule from "./shaders/velocity.wgsl";
+import diffustionModule from "./shaders/diffusion.wgsl";
 
 export async function createDisplayPipeline(device: GPUDevice) {
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   const module = device.createShaderModule({
-    label: "my module",
-    code: displayModule
+    label: "Display module",
+    code: displayModule,
   });
 
   const descriptor: GPURenderPipelineDescriptor = {
-    layout: 'auto',
+    layout: "auto",
     vertex: {
       module,
     },
     fragment: {
       module,
-      targets: [{ format: presentationFormat }]
-    }
-  }
+      targets: [{ format: presentationFormat }],
+    },
+  };
   const pipeline = device.createRenderPipelineAsync(descriptor);
-  return pipeline
+  return pipeline;
 }
 
+export async function createVelocityPipeline(device: GPUDevice) {
+  const module = device.createShaderModule({
+    label: "Velocity Module",
+    code: velocityModule,
+  });
 
+  const descriptor: GPUComputePipelineDescriptor = {
+    layout: "auto",
+    compute: {
+      module,
+    },
+  };
+
+  const pipeline = device.createComputePipelineAsync(descriptor);
+  return pipeline;
+}
+
+export async function createDiffustionPipeline(device: GPUDevice) {
+  const module = device.createShaderModule({
+    label: "Diffustion pipeline",
+    code: diffustionModule,
+  });
+
+  const descriptor: GPUComputePipelineDescriptor = {
+    layout: "auto",
+    compute: {
+      module,
+    },
+  };
+
+  const pipeline = device.createComputePipelineAsync(descriptor);
+  return pipeline;
+}
