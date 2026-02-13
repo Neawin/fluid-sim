@@ -2,6 +2,12 @@ import displayModule from "./shaders/display.wgsl";
 import velocityModule from "./shaders/velocity.wgsl";
 import diffustionModule from "./shaders/diffusion.wgsl";
 
+export interface IPipelines {
+  displayPipeline: GPURenderPipeline;
+  velocityPipeline: GPUComputePipeline;
+  diffusionPipeline: GPUComputePipeline;
+}
+
 export async function createDisplayPipeline(device: GPUDevice) {
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   const module = device.createShaderModule({
@@ -55,4 +61,11 @@ export async function createDiffustionPipeline(device: GPUDevice) {
 
   const pipeline = device.createComputePipelineAsync(descriptor);
   return pipeline;
+}
+
+export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
+  const displayPipeline = await createDisplayPipeline(device);
+  const velocityPipeline = await createVelocityPipeline(device);
+  const diffusionPipeline = await createDiffustionPipeline(device);
+  return { displayPipeline, velocityPipeline, diffusionPipeline };
 }

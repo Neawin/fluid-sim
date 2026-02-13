@@ -1,9 +1,10 @@
-import { finalize, fromEvent, switchMap, takeUntil } from "rxjs";
-import { createDiffustionPipeline, createDisplayPipeline, createVelocityPipeline } from "./pipelines";
+import { debounceTime, finalize, fromEvent, interval, merge, switchMap, takeUntil, timeout, timer } from "rxjs";
+import { getVelocity } from "./utils";
+import { createTexture, initTextureData } from "./texture";
+import { createPipelines, type IPipelines } from "./pipelines";
 
-function randomColor() {
-  return Math.floor(Math.random() * 255);
-}
+let position = [0, 0];
+let velocity = [0, 0];
 
 export async function run() {
   const canvas = document.querySelector("#webgpu-canvas") as HTMLCanvasElement;
@@ -25,17 +26,15 @@ export async function run() {
     format: navigator.gpu.getPreferredCanvasFormat(),
   });
 
-  let position = [0, 0];
-  let velocity = [0, 0];
-
   const mousedown$ = fromEvent(window, "mousedown");
   const mousemove$ = fromEvent(window, "mousemove");
   const mouseup$ = fromEvent(window, "mouseup");
+  const mouseStopped$ = mousemove$.pipe(debounceTime(200));
 
   mousedown$
     .pipe(
       switchMap(() =>
-        mousemove$.pipe(
+        merge(mousemove$, mouseStopped$).pipe(
           takeUntil(mouseup$),
           finalize(() => {
             velocity = [0, 0];
@@ -45,14 +44,14 @@ export async function run() {
     )
     .subscribe((e) => {
       const ev = e as MouseEvent;
-      const x = ev.x / size.width;
-      const y = 1.0 - ev.y / size.height;
-      velocity = calcMouseDelta(ev);
-      position = [x, y];
+      const xnorm = ev.x / size.width;
+      const ynorm = 1.0 - ev.y / size.height;
+      velocity = getVelocity(ev);
+      console.log(velocity);
+      position = [xnorm, ynorm];
     });
-  const displayPipeline = await createDisplayPipeline(device);
-  const velocityPipeline = await createVelocityPipeline(device);
-  const diffustionPipeline = await createDiffustionPipeline(device);
+
+  const pipelines: IPipelines = await createPipelines(device);
 
   // 2 * 32float
   const uniformBufferSize = 4 * 4;
@@ -88,6 +87,7 @@ export async function run() {
   };
 
   const frame = async () => {
+    const { diffusionPipeline, velocityPipeline, displayPipeline } = pipelines;
     const displayBindGroup = device.createBindGroup({
       label: "display Bind group",
       layout: displayPipeline.getBindGroupLayout(0),
@@ -109,7 +109,7 @@ export async function run() {
 
     const diffustionBindGroup = device.createBindGroup({
       label: "diffusion bind group",
-      layout: diffustionPipeline.getBindGroupLayout(0),
+      layout: diffusionPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: texture2 },
         { binding: 1, resource: texture1 },
@@ -133,7 +133,7 @@ export async function run() {
     computePass.dispatchWorkgroups(textureWidth, textureHeight, 1);
 
     // DIFFUSTION PASS
-    computePass.setPipeline(diffustionPipeline);
+    computePass.setPipeline(diffusionPipeline);
     computePass.setBindGroup(0, diffustionBindGroup);
     computePass.dispatchWorkgroups(textureWidth, textureHeight, 1);
 
@@ -149,59 +149,8 @@ export async function run() {
     const commandBuffer = encoder.finish();
     device.queue.submit([commandBuffer]);
 
-    // let temp = texture1;
-    // texture1 = texture2;
-    // texture2 = temp;
-
     requestAnimationFrame(frame);
   };
 
   frame();
-}
-
-function initTextureData(width: number, height: number): number[][] {
-  const data: number[][] = [];
-  for (let i = 0; i < width; i++) {
-    for (let j = 0; j < height; j++) {
-      const pointData = [randomColor(), randomColor(), 0, 0];
-      data.push(pointData);
-    }
-  }
-  return data;
-}
-
-function createTexture(device: GPUDevice, width: number, height: number) {
-  const tex = device.createTexture({
-    label: "my texture",
-    size: [width, height],
-    dimension: "2d",
-    format: "rgba8unorm",
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
-  });
-
-  return tex;
-}
-
-let prevX = 0;
-let prevY = 0;
-let prevT = performance.now();
-function calcMouseDelta(e: MouseEvent) {
-  const x = e.x;
-  const y = e.y;
-  const dx = x - prevX;
-  const dy = y - prevY;
-  const t = performance.now();
-  const dt = prevT - t;
-
-  const velocityX = dx / dt;
-  const velocityY = dy / dt;
-
-  prevX = x;
-  prevY = y;
-  prevT = t;
-
-  console.log("velocityX", velocityX);
-  console.log("velocityY", velocityY);
-
-  return [-velocityX, velocityY];
 }
