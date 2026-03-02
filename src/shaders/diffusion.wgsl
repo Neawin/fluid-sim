@@ -1,27 +1,35 @@
+struct DensityStruct {
+  diff : f32,
+  dt : f32
+}
+
 @group(0) @binding(0) var inputTexture : texture_2d<f32>;
 @group(0) @binding(1) var outputTexture : texture_storage_2d < rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> densityInput : DensityStruct;
 
 @compute @workgroup_size(1) fn computeVelocity(@builtin(global_invocation_id) id : vec3 <u32>)
 {
   let position = id.xy;
+  let dims = vec2f(textureDimensions(inputTexture));
 
-  //velocity is in 0-1 range right now with center point beign 0.5 0.5
-  let baseVelocity = textureLoad(inputTexture, position, 0);
-  //need to update to -1 to 1 range with 0 beign in middle
-  let velocity = baseVelocity * 2 - 1;
+  let diff = densityInput.diff;
+  let dt = densityInput.dt;
 
+  let center = id.xy;
+  let left = vec2u(center.x - 1, center.y);
+  let right = vec2u(center.x + 1, center.y);
+  let top = vec2u(center.x, center.y + 1);
+  let bottom = vec2u(center.x, center.y - 1);
 
-  let decay = 0.97;
-  let targetVelocity = vec2f(0.0, 0.0);
+  let densC = textureLoad(inputTexture, center, 0);
+  let densL = textureLoad(inputTexture, left, 0);
+  let densR = textureLoad(inputTexture, right, 0);
+  let densT = textureLoad(inputTexture, top, 0);
+  let densB = textureLoad(inputTexture, bottom, 0);
 
-  var newVelocity = mix(targetVelocity, velocity.rg, decay);
+  //START SIM STEP
+  let a = dt * diff * dims.x * dims.y;
+  let newDens = (densC.r + a * (densL.r + densR.r + densB.r + densT.r)) / (1 + 4*a);
 
-  //seems like distance is not correctly checkced or velocity is not set to 0.0 0.0 to totally disappear line ?
-  let d = distance(newVelocity, targetVelocity);
-  if (d < 0.1)
-  {
-    newVelocity = vec2f(0.0, 0.0);
-  }
-  let normVelocity = (newVelocity + 1) / 2;
-  textureStore(outputTexture, position, vec4f(normVelocity, 0.0, 1.0));
+  textureStore(outputTexture, position, vec4f(newDens, newDens, newDens, 1.0));
 }

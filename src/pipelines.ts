@@ -1,18 +1,18 @@
-import displayModule from "./shaders/display.wgsl";
+import baseModule from "./shaders/base.wgsl";
 import velocityModule from "./shaders/velocity.wgsl";
 import diffustionModule from "./shaders/diffusion.wgsl";
 
 export interface IPipelines {
-  displayPipeline: GPURenderPipeline;
+  basePipeline: GPURenderPipeline;
   velocityPipeline: GPUComputePipeline;
   diffusionPipeline: GPUComputePipeline;
 }
 
-export async function createDisplayPipeline(device: GPUDevice) {
+export async function createBasePipeline(device: GPUDevice) {
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   const module = device.createShaderModule({
     label: "Display module",
-    code: displayModule,
+    code: baseModule,
   });
 
   const descriptor: GPURenderPipelineDescriptor = {
@@ -46,9 +46,9 @@ export async function createVelocityPipeline(device: GPUDevice) {
   return pipeline;
 }
 
-export async function createDiffustionPipeline(device: GPUDevice) {
+export async function createDiffusionPipeline(device: GPUDevice) {
   const module = device.createShaderModule({
-    label: "Diffustion pipeline",
+    label: "Diffusion pipeline",
     code: diffustionModule,
   });
 
@@ -64,8 +64,8 @@ export async function createDiffustionPipeline(device: GPUDevice) {
 }
 
 export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
-  const displayPipeline = await createDisplayPipeline(device);
+  const basePipeline = await createBasePipeline(device);
   const velocityPipeline = await createVelocityPipeline(device);
-  const diffusionPipeline = await createDiffustionPipeline(device);
-  return { displayPipeline, velocityPipeline, diffusionPipeline };
+  const diffusionPipeline = await createDiffusionPipeline(device);
+  return { basePipeline, velocityPipeline, diffusionPipeline };
 }

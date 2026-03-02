@@ -4,7 +4,7 @@ export function initTextureData(width: number, height: number): number[][] {
   const data: number[][] = [];
   for (let i = 0; i < width; i++) {
     for (let j = 0; j < height; j++) {
-      const pointData = [randomColor(), randomColor(), 0, 0];
+      const pointData = [randomColor(), randomColor(), randomColor(), 0];
       data.push(pointData);
     }
   }

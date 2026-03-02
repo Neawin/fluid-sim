@@ -22,11 +22,8 @@ struct UniformStruct {
   let delta = uniforms.delta;
 
 
-  //now i need to add velocity at that texel if its the same as mouse posTexel, for that i need sampler to extract texture dimensions like
-  //velocity of current texel + some velocity of mouse at current mouse texel and then store inside that texel with textureStore
   if (all(mouseTexelPos == texel))
   {
-    //and here i should update with norma
     let newVelocity = updatedVelocity + delta;
     let normVelocity = (newVelocity + 1) / 2;
     textureStore(outputTexture, texel, vec4f(normVelocity, 0.0, 1.0));
