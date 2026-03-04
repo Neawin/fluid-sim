@@ -11,6 +11,17 @@ interface IBuffer {
   view: Float32Array;
 }
 
+interface VelocitField {
+  textures: IDoubleTexture;
+  data: number[];
+}
+
+interface IDoubleTexture {
+  tex1: GPUTexture;
+  tex2: GPUTexture;
+  swap: () => void;
+}
+
 export class FluidSimulator {
   device!: GPUDevice;
   texture!: GPUTexture[];
@@ -23,8 +34,8 @@ export class FluidSimulator {
     diffuse: IBuffer;
   };
   size = { width: 0, height: 0 };
-  velocity!: any;
-  dye!: any;
+  velocity!: VelocitField;
+  dye!: IDoubleTexture;
 
   constructor() {}
 
@@ -34,10 +45,14 @@ export class FluidSimulator {
     await sim.createPipelines();
     sim.createBuffers();
     sim.createRenderPassDescriptor();
-    sim.velocity = sim.createDoubleTexture();
+    sim.velocity = {
+      textures: sim.createDoubleTexture(),
+      data: [0, 0],
+    };
     sim.dye = sim.createDoubleTexture();
     sim.writeDyeTexture();
     sim.sampler = sim.device.createSampler();
+    sim.writeVelocityTexture();
 
     // mouseVelocityListener(sim.resetVelocity, sim.size).subscribe(({ position, velocity }) => {
     // });
@@ -50,52 +65,42 @@ export class FluidSimulator {
     const colorAttachments = this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[];
     colorAttachments[0].view = this.ctx.getCurrentTexture();
 
-    this.diffuse();
-    this.advect();
+    const dt = calcDeltaTime();
+    this.diffuse(dt);
+    this.advect(dt);
     this.render();
 
     requestAnimationFrame(this.step);
   };
 
-  advect() {
-    const dt = calcDeltaTime();
+  advect(dt: number) {
     let tex1 = this.dye.tex1;
     let tex2 = this.dye.tex2;
     const device = this.device;
-    const pipeline = this.pipelines.diffusionPipeline;
-    const n = config.TEXTURE_HEIGHT * config.TEXTURE_WIDTH;
-    const dt0 = dt * n;
+    const pipeline = this.pipelines.advectPipeline;
 
     const advect = this.buffers.advect;
-    console.log(advect);
-  }
+    const velocityTex = this.velocity.textures.tex1;
+    advect.view[0] = dt;
 
-  diffuse() {
-    const dt = calcDeltaTime();
-    let tex1 = this.dye.tex1;
-    let tex2 = this.dye.tex2;
-    const device = this.device;
-    const pipeline = this.pipelines.diffusionPipeline;
-    const diffuse = this.buffers.diffuse;
+    device.queue.writeBuffer(advect.buffer, 0, advect.data);
 
-    diffuse.view[0] = 0.6;
-    diffuse.view[1] = dt;
-    device.queue.writeBuffer(diffuse.buffer, 0, diffuse.data);
-
-    const diffusionBindGroup = device.createBindGroup({
-      label: "diffusion bind group",
+    const advectBindGroup = device.createBindGroup({
+      label: "advect bind group",
       layout: pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: tex1 },
         { binding: 1, resource: tex2 },
-        { binding: 2, resource: diffuse.buffer },
+        { binding: 2, resource: velocityTex },
+        { binding: 3, resource: advect.buffer },
       ],
     });
+
     const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     const computePass = encoder.beginComputePass();
 
     computePass.setPipeline(pipeline);
-    computePass.setBindGroup(0, diffusionBindGroup);
+    computePass.setBindGroup(0, advectBindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -103,6 +108,43 @@ export class FluidSimulator {
     const commandBuffer = encoder.finish();
 
     device.queue.submit([commandBuffer]);
+    this.dye.swap();
+  }
+
+  diffuse(dt: number) {
+    let tex1 = this.dye.tex1;
+    let tex2 = this.dye.tex2;
+    const device = this.device;
+    const pipeline = this.pipelines.diffusionPipeline;
+    const diffuse = this.buffers.diffuse;
+
+    diffuse.view[0] = config.DIFFUSION;
+    diffuse.view[1] = dt;
+    device.queue.writeBuffer(diffuse.buffer, 0, diffuse.data);
+
+    for (let i = 0; i < 100; i++) {
+      const diffusionBindGroup = device.createBindGroup({
+        label: "diffusion bind group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: tex1 },
+          { binding: 1, resource: tex2 },
+          { binding: 2, resource: diffuse.buffer },
+        ],
+      });
+      const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
+      const computePass = encoder.beginComputePass();
+
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, diffusionBindGroup);
+      computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+
+      computePass.end();
+
+      const commandBuffer = encoder.finish();
+
+      device.queue.submit([commandBuffer]);
+    }
 
     this.dye.swap();
   }
@@ -166,6 +208,34 @@ export class FluidSimulator {
       { width: config.TEXTURE_WIDTH, height: config.TEXTURE_HEIGHT },
     );
   }
+  writeVelocityTexture() {
+    const w = config.TEXTURE_WIDTH;
+    const h = config.TEXTURE_HEIGHT;
+    const size = w * h * 4;
+    const textureData = new Uint8Array(size);
+    const cx = w / 2;
+    const cy = h / 2;
+
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        const dx = x - cx;
+        const dy = y - cy;
+        // perpendicular to radius = rotation
+        // normalize and scale to 0-255 range with 128 as zero
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const vx = (-dy / len) * 20 + 128;
+        const vy = (dx / len) * 20 + 128;
+
+        const idx = (y * w + x) * 4;
+        textureData[idx] = Math.min(100, Math.max(0, Math.round(vx)));
+        textureData[idx + 1] = Math.min(100, Math.max(0, Math.round(vy)));
+        textureData[idx + 2] = 0;
+        textureData[idx + 3] = 0;
+      }
+    }
+
+    this.device.queue.writeTexture({ texture: this.velocity.textures.tex1 }, textureData, { bytesPerRow: w * 4 }, { width: w, height: h });
+  }
 
   createRenderPassDescriptor() {
     const renderPassDescriptor: GPURenderPassDescriptor = {
@@ -182,13 +252,13 @@ export class FluidSimulator {
     this.renderPassDescriptor = renderPassDescriptor;
   }
 
-  createDoubleTexture() {
+  createDoubleTexture(): IDoubleTexture {
     const device = this.device;
     const textureWidth = config.TEXTURE_WIDTH;
     const textureHeight = config.TEXTURE_HEIGHT;
 
-    let tex1 = createTexture(device, textureWidth, textureHeight);
-    let tex2 = createTexture(device, textureWidth, textureHeight);
+    let tex1 = createTexture("tex1", device, textureWidth, textureHeight);
+    let tex2 = createTexture("tex2", device, textureWidth, textureHeight);
 
     return {
       get tex1() {
@@ -232,6 +302,6 @@ export class FluidSimulator {
   }
 
   resetVelocity = () => {
-    this.velocity = [0, 0];
+    this.velocity.data = [0, 0];
   };
 }

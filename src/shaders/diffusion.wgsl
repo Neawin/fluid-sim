@@ -16,10 +16,10 @@ struct DensityStruct {
   let dt = densityInput.dt;
 
   let center = id.xy;
-  let left = vec2u(center.x - 1, center.y);
-  let right = vec2u(center.x + 1, center.y);
-  let top = vec2u(center.x, center.y + 1);
-  let bottom = vec2u(center.x, center.y - 1);
+  let left = vec2u(max(center.x, 1u) - 1u, center.y);
+  let right = vec2u(min(center.x + 1u, u32(dims.x) - 1u), center.y);
+  let top = vec2u(center.x, min(center.y + 1u, u32(dims.y) - 1u));
+  let bottom = vec2u(center.x, max(center.y, 1u) - 1u);
 
   let densC = textureLoad(inputTexture, center, 0);
   let densL = textureLoad(inputTexture, left, 0);

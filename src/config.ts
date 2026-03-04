@@ -1,5 +1,5 @@
 export const config = {
-  TEXTURE_WIDTH: 24,
-  TEXTURE_HEIGHT: 20,
-  DIFFUSION: 0.8,
+  TEXTURE_WIDTH: 250,
+  TEXTURE_HEIGHT: 250,
+  DIFFUSION: 20,
 };
