@@ -40,7 +40,7 @@ export class FluidSimulator {
     };
     sim.dye = createDoubleTexture(sim.device);
     sim.sampler = sim.device.createSampler();
-    // sim.writeVelocityTexture();
+    sim.writeVelocityTexture();
     sim.createBindGroups();
     // mouseVelocityListener(sim.resetVelocity, sim.size).subscribe(({ position, velocity }) => {
     // });
@@ -58,7 +58,7 @@ export class FluidSimulator {
     // this.velocityStep(dt);
     // this.diffuseStep(dt);
     // this.advectStep(dt);
-    // this.drawCheckerboard();
+    this.drawCheckerboard();
     this.drawVelocity(timestamp);
     this.renderQuad();
     requestAnimationFrame(this.step);
@@ -261,6 +261,19 @@ export class FluidSimulator {
       velocityField: this.createUniformBuffer("velocity field uniform buffer", 2 * 4),
       checkerboard: this.createUniformBuffer("checkerboard uniform buffer", 2 * 4),
     };
+  }
+
+  writeVelocityTexture() {
+    const w = config.TEXTURE_WIDTH;
+    const h = config.TEXTURE_HEIGHT;
+    const device = this.device;
+
+    const { tex1, tex2 } = this.velocity.textures;
+    const data = initVelocityData(w, h);
+    console.log(data);
+    const view = new Float32Array(data.flat());
+
+    device.queue.writeTexture({ texture: tex1 }, view, { bytesPerRow: w * 4 }, { width: w, height: h });
   }
 
   createBindGroups() {

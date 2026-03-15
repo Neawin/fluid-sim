@@ -1,10 +1,9 @@
-const ARROW_HEAD_WIDTH : f32 = 0.08;
-const ARROW_HEAD_HEIGHT : f32 = 0.16;
-const ARROW_HEAD_ANTIALIAS : f32 = 64.0;
-const ARROW_STEM_THICKNESS : f32 = .01;
+const ARROW_HEAD_WIDTH : f32 = 0.2;
+const ARROW_HEAD_HEIGHT : f32 = 0.3;
+const ARROW_HEAD_ANTIALIAS : f32 = 128.0;
+const ARROW_STEM_THICKNESS : f32 = .04;
 const ARROW_STEM_ANTIALIAS : f32 = 6;
 const PI = 3.14;
-
 const SCALE = 2;
 
 struct VertexIn {
@@ -15,6 +14,7 @@ struct VertexIn {
 struct VertexOut {
   @builtin(position) position : vec4f,
   @location(0) texcoord : vec2f,
+  @location(1) velocity : vec2f,
 }
 
 @group(0) @binding(0) var ourTexture : texture_2d<f32>;
@@ -27,6 +27,10 @@ vert : VertexIn
   let dims = vec2f(textureDimensions(ourTexture));
   let cellX = f32(vert.index) % dims.x;
   let cellY = floor(f32(vert.index) / dims.x);
+
+  //-1 - 1
+  let velocity = vec2f(textureLoad(ourTexture, vec2u(u32(cellX), u32(cellY)), 0).xy) * 2 - 1;
+
 
   let pos = array(
   vec2f(-1, 1),
@@ -45,23 +49,27 @@ vert : VertexIn
   //-1 .. 1 clipspace always
   let xy = pos[vert.vertIndex];
   //position to 0 .. 1 position
-  let uv = xy * 0.5 + 0.5;
+  //let uv = xy * 0.5 + 0.5;
 
-  //so this sends 0 to 1920 ?
-  vsOut.position = vec4f(xy, 0, 1);
-  vsOut.texcoord = uv;
+  let offset = vec2f(u, v);
+
+  vsOut.position = vec4f((xy / dims) + offset, 0, 1);
+  vsOut.texcoord = xy;
+  vsOut.velocity = velocity;
 
   return vsOut;
 }
 
 @fragment fn fs(fsInput : VertexOut) -> @location(0) vec4f {
   //-1 to 1
-  let uv = SCALE * (2 * fsInput.position.xy - resolution.xy) / resolution.y;
+  let velocity = fsInput.velocity;
+  let uv = fsInput.texcoord;
+
   var arrow : Arrow;
   arrow.base = vec2f(0, 0);
-  arrow.dir = PI;
-  arrow.norm = 1;
-  return vec4f(drawArrow(uv, arrow));
+  arrow.dir = atan2(velocity.y, velocity.x);
+  arrow.norm = distance(velocity, arrow.base);
+  return vec4f(1, 0, 0, drawArrow(uv, arrow));
 }
 
 struct Arrow {
@@ -75,9 +83,7 @@ fn drawArrow(uv : vec2f, arrow : Arrow) -> f32 {
   let norm = arrow.norm;
   let dir = arrow.dir;
 
-
   let rotated = mat2x2 < f32 > (cos(dir), - sin(dir), sin(dir), cos(dir)) * uv;
-
   let stemLen = max(0, norm - ARROW_HEAD_HEIGHT);
   var stem = dfLineSegment(rotated, base, base + vec2(stemLen, 0));
 
