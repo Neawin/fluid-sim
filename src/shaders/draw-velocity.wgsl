@@ -1,7 +1,7 @@
 const ARROW_HEAD_WIDTH : f32 = 0.2;
-const ARROW_HEAD_HEIGHT : f32 = 0.3;
-const ARROW_HEAD_ANTIALIAS : f32 = 128.0;
-const ARROW_STEM_THICKNESS : f32 = .04;
+const ARROW_HEAD_HEIGHT : f32 = 0.4;
+const ARROW_HEAD_ANTIALIAS : f32 = 64.0;
+const ARROW_STEM_THICKNESS : f32 = 0.05;
 const ARROW_STEM_ANTIALIAS : f32 = 6;
 const PI = 3.14;
 const SCALE = 2;
@@ -64,11 +64,16 @@ vert : VertexIn
   //-1 to 1
   let velocity = fsInput.velocity;
   let uv = fsInput.texcoord;
+  var mag = length(velocity);
+  if (mag < 0.02)
+  {
+    return vec4f(0, 0, 0, 0);
+  }
 
   var arrow : Arrow;
   arrow.base = vec2f(0, 0);
   arrow.dir = atan2(velocity.y, velocity.x);
-  arrow.norm = distance(velocity, arrow.base);
+  arrow.norm = mag;
   return vec4f(1, 0, 0, drawArrow(uv, arrow));
 }
 
