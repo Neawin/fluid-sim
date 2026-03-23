@@ -6,6 +6,7 @@ import velocityDiffusionModule from "./shaders/velocity-diffusion.wgsl";
 import projectModule from "./shaders/project.wgsl";
 import checkerBoardModule from "./shaders/checkerboard.wgsl";
 import velocityVectorModule from "./shaders/draw-velocity.wgsl";
+import densityModule from "./shaders/add-density.wgsl";
 
 export interface IPipelines {
   basePipeline: GPURenderPipeline;
@@ -16,6 +17,7 @@ export interface IPipelines {
   velocityDiffusionPipeline: GPUComputePipeline;
   projectPipeline: GPUComputePipeline;
   velocityVectorPipeline: GPURenderPipeline;
+  densityPipeline: GPUComputePipeline;
 }
 
 export async function createVelocityVectorPipeline(device: GPUDevice) {
@@ -180,6 +182,23 @@ export async function createProjectPipeline(device: GPUDevice) {
   return pipeline;
 }
 
+export async function createDensityPipeline(device: GPUDevice) {
+  const module = device.createShaderModule({
+    label: "Add Density pipeline",
+    code: densityModule,
+  });
+
+  const descriptor: GPUComputePipelineDescriptor = {
+    layout: "auto",
+    compute: {
+      module,
+    },
+  };
+
+  const pipeline = await device.createComputePipelineAsync(descriptor);
+  return pipeline;
+}
+
 export async function createDiffusionPipeline(device: GPUDevice) {
   const module = device.createShaderModule({
     label: "Diffusion pipeline",
@@ -206,6 +225,7 @@ export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
   const projectPipeline = await createProjectPipeline(device);
   const checkerboardPipeline = await createCheckerboardPipeline(device);
   const velocityVectorPipeline = await createVelocityVectorPipeline(device);
+  const densityPipeline = await createDensityPipeline(device);
   return {
     basePipeline,
     diffusionPipeline,
@@ -215,5 +235,6 @@ export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
     projectPipeline,
     checkerboardPipeline,
     velocityVectorPipeline,
+    densityPipeline,
   };
 }

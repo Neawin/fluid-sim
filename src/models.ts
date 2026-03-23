@@ -5,7 +5,7 @@ export interface IBuffer {
   view: Float32Array;
 }
 
-export interface VelocitField {
+export interface VelocityField {
   textures: IDoubleTexture;
   data: number[];
 }
@@ -25,4 +25,5 @@ export interface IBindingGroups {
   velocityDiffusionBindGroup: GPUBindGroup;
   projectBindGroup: GPUBindGroup;
   velocityVectorsBindGroup: GPUBindGroup;
+  densityBindGroup: GPUBindGroup;
 }

@@ -1,6 +1,5 @@
 import { config } from "./config";
 import type { IDoubleTexture } from "./models";
-import { randomColor } from "./utils";
 
 export function initTextureData(width: number, height: number): number[][] {
   const data: number[][] = [];
@@ -19,22 +18,21 @@ export function initVelocityData(width: number, height: number): number[][] {
 
   for (let j = 0; j < height; j++) {
     for (let i = 0; i < width; i++) {
-      const dx = cx - i;
-      const dy = cy - j;
-      const d = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
-      const nx = dx / d;
-      const ny = dy / d;
-      const r = (nx + 1) * 0.5 * 255;
-      const g = (ny + 1) * 0.5 * 255;
-      if (d === 0) {
-        data.push([128, 128, 0, 255]);
-        continue;
-      }
-      const pointData = [Math.round(r), Math.round(g), 0, 255];
+      // const dx = cx - i;
+      // const dy = cy - j;
+      // const d = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+      // if (d === 0) {
+      //   data.push([128, 128, 0, 255]);
+      //   continue;
+      // }
+      // const nx = dx / d;
+      // const ny = dy / d;
+      // const r = (nx + 1) * 0.5 * 255;
+      // const g = (ny + 1) * 0.5 * 255;
+      const pointData = [255, 128, 0, 255];
       data.push(pointData);
     }
   }
-  data[3][0] = 0;
 
   return data;
 }

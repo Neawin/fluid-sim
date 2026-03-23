@@ -1,18 +1,7 @@
-import {
-  debounceTime,
-  finalize,
-  fromEvent,
-  map,
-  merge,
-  switchMap,
-  takeUntil,
-} from "rxjs";
+import { debounceTime, finalize, fromEvent, map, merge, switchMap, takeUntil } from "rxjs";
 import { getVelocity, resetPosition } from "./utils";
 
-export function mouseVelocityListener(
-  onDragEnd: () => void,
-  size: { width: number; height: number },
-) {
+export function mouseVelocityListener(onDragEnd: () => void, size: { width: number; height: number }) {
   const mousedown$ = fromEvent(window, "mousedown");
   const mousemove$ = fromEvent(window, "mousemove");
   const mouseup$ = fromEvent(window, "mouseup");

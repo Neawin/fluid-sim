@@ -1,8 +1,8 @@
 import { config } from "./config";
-import type { IBindingGroups, IBuffer, IDoubleTexture, VelocitField } from "./models";
+import type { IBindingGroups, IBuffer, IDoubleTexture, VelocityField } from "./models";
 import { mouseVelocityListener } from "./mouse";
 import { createPipelines, type IPipelines } from "./pipelines";
-import { createDoubleTexture, createTexture, initTextureData, initVelocityData } from "./texture";
+import { createDoubleTexture, initTextureData, initVelocityData } from "./texture";
 import { calcDeltaTime } from "./utils";
 
 export class FluidSimulator {
@@ -11,6 +11,7 @@ export class FluidSimulator {
   ctx!: GPUCanvasContext;
   pipelines!: IPipelines;
   renderPassDescriptor!: GPURenderPassDescriptor;
+  streamer!: any;
   sampler!: GPUSampler;
   uniforms!: {
     advect: IBuffer;
@@ -18,11 +19,13 @@ export class FluidSimulator {
     velocity: IBuffer;
     checkerboard: IBuffer;
     velocityField: IBuffer;
+    density: IBuffer;
   };
-  bindingGroups!: IBindingGroups;
 
+  mouseDown = false;
+  mousePos = [30, 30];
   size = { width: 0, height: 0 };
-  velocity!: VelocitField;
+  velocity!: VelocityField;
   dye!: IDoubleTexture;
 
   constructor() {}
@@ -41,36 +44,120 @@ export class FluidSimulator {
     sim.dye = createDoubleTexture(sim.device);
     sim.sampler = sim.device.createSampler();
     sim.writeVelocityTexture();
-    sim.createBindGroups();
-    // mouseVelocityListener(sim.resetVelocity, sim.size).subscribe(({ position, velocity }) => {
-    // });
+    mouseVelocityListener(sim.reset, sim.size).subscribe(({ position, velocity }) => {
+      sim.velocity.data = velocity;
+      sim.mousePos = position;
+      sim.mouseDown = true;
+    });
     sim.writeTextures();
-    sim.step(0);
+    sim.step();
 
     return sim;
   }
 
-  step = (timestamp: number) => {
+  step = () => {
     const colorAttachments = this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[];
     colorAttachments[0].view = this.ctx.getCurrentTexture();
 
+    // this.drawCheckerboard();
+    // this.drawVelocity();
     const dt = calcDeltaTime();
-    // this.velocityStep(dt);
-    // this.diffuseStep(dt);
-    // this.advectStep(dt);
-    this.drawCheckerboard();
-    this.drawVelocity(timestamp);
+    this.densityStep(dt);
+    this.velocityStep(dt);
     this.renderQuad();
     requestAnimationFrame(this.step);
   };
 
-  drawVelocity(frame: number) {
+  densityStep(dt: number) {
+    if (this.mouseDown) {
+      this.addDensity();
+    }
+    this.dye.swap();
+    this.diffuseStep(dt);
+    this.dye.swap();
+    this.advectStep(dt);
+  }
+
+  addDensity() {
+    const device = this.device;
+    const pipeline = this.pipelines.densityPipeline;
+    const uniform = this.uniforms.density;
+    const mousePos = this.mousePos;
+
+    uniform.view[0] = mousePos[0];
+    uniform.view[1] = mousePos[1];
+
+    this.device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
+    const bindGroup = device.createBindGroup({
+      label: "density bind Group",
+      layout: this.pipelines.densityPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.dye.tex1 },
+        { binding: 1, resource: this.dye.tex2 },
+        { binding: 2, resource: uniform.buffer },
+      ],
+    });
+
+    let encoder = device.createCommandEncoder({ label: "compute density encoder" });
+    let computePass = encoder.beginComputePass();
+
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
+    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.end();
+
+    let commandBuffer = encoder.finish();
+
+    device.queue.submit([commandBuffer]);
+  }
+
+  diffuseStep(dt: number) {
+    const device = this.device;
+    const pipeline = this.pipelines.diffusionPipeline;
+    const uniform = this.uniforms.diffuse;
+
+    uniform.view[0] = config.DIFFUSION;
+    uniform.view[1] = dt;
+    device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
+
+    const bindGroup = this.device.createBindGroup({
+      label: "diffuse step bind group",
+      layout: this.pipelines.diffusionPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.dye.tex1 },
+        { binding: 1, resource: this.dye.tex2 },
+        { binding: 2, resource: uniform.buffer },
+      ],
+    });
+
+    const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
+    const computePass = encoder.beginComputePass();
+
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
+    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.end();
+
+    const commandBuffer = encoder.finish();
+
+    device.queue.submit([commandBuffer]);
+  }
+
+  drawVelocity() {
     const device = this.device;
     const pipeline = this.pipelines.velocityVectorPipeline;
-    const bindGroup = this.bindingGroups.velocityVectorsBindGroup;
 
     const uniform = this.uniforms.velocityField;
     device.queue.writeBuffer(uniform.buffer, 0, new Float32Array([this.size.width, this.size.height]));
+
+    const bindGroup = this.device.createBindGroup({
+      label: "velocity vectors bind group",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: uniform.buffer },
+      ],
+    });
 
     const encoder = device.createCommandEncoder({ label: "velocity vectors encoder" });
 
@@ -90,7 +177,11 @@ export class FluidSimulator {
     const device = this.device;
     const pipeline = this.pipelines.checkerboardPipeline;
     const uniform = this.uniforms.checkerboard;
-    const bindGroup = this.bindingGroups.checkerboardBindGroup;
+    const bindGroup = this.device.createBindGroup({
+      label: "checkerboard bind group",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: uniform.buffer }],
+    });
     const cellWidth = this.size.width / config.TEXTURE_WIDTH;
     const cellHeight = this.size.height / config.TEXTURE_HEIGHT;
     uniform.view[0] = cellWidth;
@@ -110,21 +201,21 @@ export class FluidSimulator {
   }
 
   velocityStep(dt: number) {
-    this.diffVelocityStep(dt);
-    this.projectVelocity();
-    this.advectVelocityStep(dt);
+    // this.diffVelocityStep(dt);
+    // this.projectVelocity();
+    // this.advectVelocityStep(dt);
   }
 
   projectVelocity() {
     const device = this.device;
     const pipeline = this.pipelines.projectPipeline;
-    const bindGroup = this.bindingGroups.projectBindGroup;
+    // const bindGroup = this.bindingGroups.projectBindGroup;
 
     let encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     let computePass = encoder.beginComputePass();
 
     computePass.setPipeline(pipeline);
-    computePass.setBindGroup(0, bindGroup);
+    // computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -140,7 +231,7 @@ export class FluidSimulator {
     const device = this.device;
     const pipeline = this.pipelines.velocityDiffusionPipeline;
     const uniform = this.uniforms.velocity;
-    const bindGroup = this.bindingGroups.velocityDiffusionBindGroup;
+    // const bindGroup = this.bindingGroups.velocityDiffusionBindGroup;
 
     uniform.view[0] = config.VISCOSITY;
     uniform.view[1] = dt;
@@ -150,7 +241,7 @@ export class FluidSimulator {
     let computePass = encoder.beginComputePass();
 
     computePass.setPipeline(pipeline);
-    computePass.setBindGroup(0, bindGroup);
+    // computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -165,13 +256,13 @@ export class FluidSimulator {
   advectVelocityStep(dt: number) {
     const device = this.device;
     const advPipeline = this.pipelines.velocityAdvectPipeline;
-    const bindGroup = this.bindingGroups.velocityAdvectBindGroup;
+    // const bindGroup = this.bindingGroups.velocityAdvectBindGroup;
 
     const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     const computePass = encoder.beginComputePass();
 
     computePass.setPipeline(advPipeline);
-    computePass.setBindGroup(0, bindGroup);
+    // computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -188,11 +279,21 @@ export class FluidSimulator {
   advectStep(dt: number) {
     const device = this.device;
     const pipeline = this.pipelines.advectPipeline;
-    const bindGroup = this.bindingGroups.advectBindGroup;
     const uniform = this.uniforms.advect;
 
     uniform.view[0] = dt;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
+
+    const bindGroup = this.device.createBindGroup({
+      label: "advect bind group",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.dye.tex1 },
+        { binding: 1, resource: this.dye.tex2 },
+        { binding: 2, resource: this.velocity.textures.tex1 },
+        { binding: 3, resource: uniform.buffer },
+      ],
+    });
 
     const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     const computePass = encoder.beginComputePass();
@@ -206,40 +307,18 @@ export class FluidSimulator {
     const commandBuffer = encoder.finish();
 
     device.queue.submit([commandBuffer]);
-    this.dye.swap();
-  }
-
-  diffuseStep(dt: number) {
-    const device = this.device;
-    const pipeline = this.pipelines.diffusionPipeline;
-    const uniform = this.uniforms.diffuse;
-    const bindGroup = this.bindingGroups.diffusionBindGroup;
-
-    uniform.view[0] = config.DIFFUSION;
-    uniform.view[1] = dt;
-    device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
-
-    for (let i = 0; i < 20; i++) {
-      const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
-      const computePass = encoder.beginComputePass();
-
-      computePass.setPipeline(pipeline);
-      computePass.setBindGroup(0, bindGroup);
-      computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
-      computePass.end();
-
-      const commandBuffer = encoder.finish();
-
-      device.queue.submit([commandBuffer]);
-    }
-
-    this.dye.swap();
   }
 
   renderQuad() {
     const device = this.device;
     const pipeline = this.pipelines.basePipeline;
-    const bindGroup = this.bindingGroups.baseBindGroup;
+    const bindGroup = this.device.createBindGroup({
+      layout: this.pipelines.basePipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.dye.tex1 },
+      ],
+    });
 
     const renderEncoder = device.createCommandEncoder({ label: "Render Encoder" });
 
@@ -257,6 +336,7 @@ export class FluidSimulator {
     this.uniforms = {
       advect: this.createUniformBuffer("advect uniform buffer", 2 * 4),
       diffuse: this.createUniformBuffer("diffusion uniform buffer", 2 * 4),
+      density: this.createUniformBuffer("density uniform buffer", 2 * 4),
       velocity: this.createUniformBuffer("velocity uniform buffer", 2 * 4),
       velocityField: this.createUniformBuffer("velocity field uniform buffer", 2 * 4),
       checkerboard: this.createUniformBuffer("checkerboard uniform buffer", 2 * 4),
@@ -270,101 +350,9 @@ export class FluidSimulator {
 
     const { tex1, tex2 } = this.velocity.textures;
     const data = initVelocityData(w, h);
-    console.log(data);
     const view = new Float32Array(data.flat());
 
     device.queue.writeTexture({ texture: tex1 }, view, { bytesPerRow: w * 4 }, { width: w, height: h });
-  }
-
-  createBindGroups() {
-    const uniforms = this.uniforms;
-    const pipelines = this.pipelines;
-    const device = this.device;
-
-    const checkerboardBindGroup = device.createBindGroup({
-      label: "checkerboard binding group",
-      layout: pipelines.checkerboardPipeline.getBindGroupLayout(0),
-      entries: [{ binding: 0, resource: uniforms.checkerboard.buffer }],
-    });
-    const projectBindGroup = device.createBindGroup({
-      label: "project bind group",
-      layout: pipelines.projectPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.velocity.textures.tex1 },
-        { binding: 1, resource: this.velocity.textures.tex2 },
-      ],
-    });
-    const advectBindGroup = device.createBindGroup({
-      label: "advect bind group",
-      layout: pipelines.advectPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.dye.tex1 },
-        { binding: 1, resource: this.dye.tex2 },
-        { binding: 2, resource: this.velocity.textures.tex1 },
-        { binding: 3, resource: uniforms.advect.buffer },
-      ],
-    });
-    const velocityDiffusionBindGroup = device.createBindGroup({
-      label: "velocity bind group",
-      layout: pipelines.velocityDiffusionPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.velocity.textures.tex1 },
-        { binding: 1, resource: this.velocity.textures.tex2 },
-        { binding: 2, resource: uniforms.velocity.buffer },
-      ],
-    });
-
-    const diffusionBindGroup = device.createBindGroup({
-      label: "diffusion bind group",
-      layout: pipelines.diffusionPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.dye.tex1 },
-        { binding: 1, resource: this.dye.tex2 },
-        { binding: 2, resource: uniforms.diffuse.buffer },
-      ],
-    });
-    const baseBindGroup = device.createBindGroup({
-      label: "display Bind group",
-      layout: pipelines.basePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: this.dye.tex1 },
-      ],
-    });
-    const velocityAdvectBindGroup = device.createBindGroup({
-      label: "velocity bind group",
-      layout: pipelines.velocityAdvectPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.velocity.textures.tex1 },
-        { binding: 1, resource: this.velocity.textures.tex2 },
-        { binding: 2, resource: uniforms.velocity.buffer },
-      ],
-    });
-    const velocityVectorsBindGroup = device.createBindGroup({
-      label: "Velocity vectors bind group",
-      layout: pipelines.velocityVectorPipeline.getBindGroupLayout(0),
-      entries: [
-        {
-          binding: 0,
-          resource: this.velocity.textures.tex1,
-        },
-        {
-          binding: 1,
-          resource: this.uniforms.velocityField.buffer,
-        },
-      ],
-    });
-
-    this.bindingGroups = {
-      checkerboardBindGroup,
-      projectBindGroup,
-      velocityDiffusionBindGroup,
-      advectBindGroup,
-      diffusionBindGroup,
-      baseBindGroup,
-      velocityAdvectBindGroup,
-      velocityVectorsBindGroup,
-    };
   }
 
   createUniformBuffer(label: string, size: number): IBuffer {
@@ -438,7 +426,8 @@ export class FluidSimulator {
     return sim;
   }
 
-  resetVelocity = () => {
+  private reset = () => {
     this.velocity.data = [0, 0];
+    this.mouseDown = false;
   };
 }
