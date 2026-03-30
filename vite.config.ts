@@ -1,17 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [
     {
-      name: 'wgsl-as-string',
+      name: "wgsl-as-string",
       transform(code, id) {
-        if (id.endsWith('.wgsl')) {
+        if (id.endsWith(".wgsl")) {
           return {
             code: `export default ${JSON.stringify(code)};`,
-            map: null
+            map: null,
           };
         }
-      }
-    }
-  ]
+      },
+    },
+  ],
 });

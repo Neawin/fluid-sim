@@ -1,5 +1,5 @@
 import { config } from "./config";
-import type { IBindingGroups, IBuffer, IDoubleTexture, VelocityField } from "./models";
+import type { IBuffer, IDoubleTexture, VelocityField } from "./models";
 import { mouseVelocityListener } from "./mouse";
 import { createPipelines, type IPipelines } from "./pipelines";
 import { createDoubleTexture, initTextureData, initVelocityData } from "./texture";
@@ -17,13 +17,17 @@ export class FluidSimulator {
     advect: IBuffer;
     diffuse: IBuffer;
     velocity: IBuffer;
+    mousePos: IBuffer;
     checkerboard: IBuffer;
     velocityField: IBuffer;
     density: IBuffer;
   };
 
   mouseDown = false;
-  mousePos = [30, 30];
+  mouse = {
+    position: [0, 0],
+    velocity: [0, 0],
+  };
   size = { width: 0, height: 0 };
   velocity!: VelocityField;
   dye!: IDoubleTexture;
@@ -46,7 +50,10 @@ export class FluidSimulator {
     sim.writeVelocityTexture();
     mouseVelocityListener(sim.reset, sim.size).subscribe(({ position, velocity }) => {
       sim.velocity.data = velocity;
-      sim.mousePos = position;
+      sim.mouse = {
+        position,
+        velocity,
+      };
       sim.mouseDown = true;
     });
     sim.writeTextures();
@@ -76,13 +83,26 @@ export class FluidSimulator {
     this.diffuseStep(dt);
     this.dye.swap();
     this.advectStep(dt);
+    // this.dye.swap();
+  }
+
+  velocityStep(dt: number) {
+    if (this.mouseDown) {
+      this.addVelocity();
+    }
+    this.velocity.textures.swap();
+    this.diffVelocityStep(dt);
+    this.projectVelocity();
+    // this.velocity.textures.swap();
+    // this.advectVelocityStep(dt);
+    // this.projectVelocity();
   }
 
   addDensity() {
     const device = this.device;
     const pipeline = this.pipelines.densityPipeline;
     const uniform = this.uniforms.density;
-    const mousePos = this.mousePos;
+    const mousePos = this.mouse.position;
 
     uniform.view[0] = mousePos[0];
     uniform.view[1] = mousePos[1];
@@ -200,22 +220,60 @@ export class FluidSimulator {
     device.queue.submit([renderEncoder.finish()]);
   }
 
-  velocityStep(dt: number) {
-    // this.diffVelocityStep(dt);
-    // this.projectVelocity();
-    // this.advectVelocityStep(dt);
+  addVelocity() {
+    const device = this.device;
+    const pipeline = this.pipelines.velocityPipeline;
+    const uniform = this.uniforms.mousePos;
+    const mouseVelocity = this.mouse.velocity;
+    const mousePos = this.mouse.position;
+
+    uniform.view[0] = mouseVelocity[0];
+    uniform.view[1] = mouseVelocity[1];
+    uniform.view[2] = mousePos[0];
+    uniform.view[3] = mousePos[1];
+    device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
+
+    const bindGroup = device.createBindGroup({
+      label: "add velocity bindgroup",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: this.velocity.textures.tex2 },
+        { binding: 2, resource: uniform.buffer },
+      ],
+    });
+
+    let encoder = device.createCommandEncoder({ label: "compute velocity encoder" });
+    let computePass = encoder.beginComputePass();
+
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
+    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+
+    computePass.end();
+
+    let commandBuffer = encoder.finish();
+
+    device.queue.submit([commandBuffer]);
   }
 
   projectVelocity() {
     const device = this.device;
     const pipeline = this.pipelines.projectPipeline;
-    // const bindGroup = this.bindingGroups.projectBindGroup;
+    const bindGroup = device.createBindGroup({
+      label: "project bind group",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: this.velocity.textures.tex2 },
+      ],
+    });
 
     let encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     let computePass = encoder.beginComputePass();
 
     computePass.setPipeline(pipeline);
-    // computePass.setBindGroup(0, bindGroup);
+    computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -231,17 +289,26 @@ export class FluidSimulator {
     const device = this.device;
     const pipeline = this.pipelines.velocityDiffusionPipeline;
     const uniform = this.uniforms.velocity;
-    // const bindGroup = this.bindingGroups.velocityDiffusionBindGroup;
 
     uniform.view[0] = config.VISCOSITY;
     uniform.view[1] = dt;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
 
+    const bindGroup = device.createBindGroup({
+      label: "diffuse velocity bindgroup",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: this.velocity.textures.tex2 },
+        { binding: 2, resource: uniform.buffer },
+      ],
+    });
+
     let encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     let computePass = encoder.beginComputePass();
 
     computePass.setPipeline(pipeline);
-    // computePass.setBindGroup(0, bindGroup);
+    computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -249,8 +316,6 @@ export class FluidSimulator {
     let commandBuffer = encoder.finish();
 
     device.queue.submit([commandBuffer]);
-
-    this.velocity.textures.swap();
   }
 
   advectVelocityStep(dt: number) {
@@ -340,6 +405,7 @@ export class FluidSimulator {
       velocity: this.createUniformBuffer("velocity uniform buffer", 2 * 4),
       velocityField: this.createUniformBuffer("velocity field uniform buffer", 2 * 4),
       checkerboard: this.createUniformBuffer("checkerboard uniform buffer", 2 * 4),
+      mousePos: this.createUniformBuffer("mouse pos uniform buffer", 4 * 4),
     };
   }
 
@@ -378,7 +444,9 @@ export class FluidSimulator {
     const velocityData = initVelocityData(w, h);
 
     this.writeTexture(dyeData, this.dye.tex1, w, h);
+    this.writeTexture(dyeData, this.dye.tex2, w, h);
     this.writeTexture(velocityData, this.velocity.textures.tex1, w, h);
+    this.writeTexture(velocityData, this.velocity.textures.tex2, w, h);
   }
 
   writeTexture(data: number[][], texture: GPUTexture, w: number, h: number) {
