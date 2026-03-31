@@ -2,7 +2,7 @@ import { config } from "./config";
 import type { IBuffer, IDoubleTexture, VelocityField } from "./models";
 import { mouseVelocityListener } from "./mouse";
 import { createPipelines, type IPipelines } from "./pipelines";
-import { createDoubleTexture, initTextureData, initVelocityData } from "./texture";
+import { createDoubleTexture, initProjectData, initTextureData, initVelocityData } from "./texture";
 import { calcDeltaTime } from "./utils";
 
 export class FluidSimulator {
@@ -23,6 +23,9 @@ export class FluidSimulator {
     density: IBuffer;
   };
 
+  lastTime = 0;
+  fps = 1000 / 144;
+
   mouseDown = false;
   mouse = {
     position: [0, 0],
@@ -31,6 +34,7 @@ export class FluidSimulator {
   size = { width: 0, height: 0 };
   velocity!: VelocityField;
   dye!: IDoubleTexture;
+  project!: IDoubleTexture;
 
   constructor() {}
 
@@ -42,10 +46,11 @@ export class FluidSimulator {
     sim.createUniforms();
     sim.createRenderPassDescriptor();
     sim.velocity = {
-      textures: createDoubleTexture(sim.device),
+      textures: createDoubleTexture(sim.device, "rgba8snorm"),
       data: [0, 0],
     };
-    sim.dye = createDoubleTexture(sim.device);
+    sim.dye = createDoubleTexture(sim.device, "rgba8unorm");
+    sim.project = createDoubleTexture(sim.device, "rgba8snorm");
     sim.sampler = sim.device.createSampler();
     sim.writeVelocityTexture();
     mouseVelocityListener(sim.reset, sim.size).subscribe(({ position, velocity }) => {
@@ -57,17 +62,34 @@ export class FluidSimulator {
       sim.mouseDown = true;
     });
     sim.writeTextures();
-    sim.step();
+    requestAnimationFrame(sim.step);
 
     return sim;
   }
+  // step = (now: number) => {
+  //   requestAnimationFrame(this.step);
+
+  //   const elapsed = now - this.lastTime;
+  //   if (elapsed < this.fps) {
+  //     return;
+  //   }
+  //   this.lastTime = now - (elapsed % this.fps);
+
+  //   const colorAttachments = this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[];
+  //   colorAttachments[0].view = this.ctx.getCurrentTexture().createView();
+
+  //   const dt = this.fps / 1000;
+  //   this.densityStep(dt);
+  //   this.velocityStep(dt);
+  //   this.renderQuad();
+  // };
 
   step = () => {
     const colorAttachments = this.renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[];
     colorAttachments[0].view = this.ctx.getCurrentTexture();
 
     // this.drawCheckerboard();
-    // this.drawVelocity();
+    this.drawVelocity();
     const dt = calcDeltaTime();
     this.densityStep(dt);
     this.velocityStep(dt);
@@ -83,19 +105,17 @@ export class FluidSimulator {
     this.diffuseStep(dt);
     this.dye.swap();
     this.advectStep(dt);
-    // this.dye.swap();
   }
 
   velocityStep(dt: number) {
-    if (this.mouseDown) {
-      this.addVelocity();
-    }
+    this.addVelocity();
     this.velocity.textures.swap();
     this.diffVelocityStep(dt);
+    this.velocity.textures.swap();
     this.projectVelocity();
-    // this.velocity.textures.swap();
-    // this.advectVelocityStep(dt);
-    // this.projectVelocity();
+    this.velocity.textures.swap();
+    this.advectVelocityStep(dt);
+    this.projectVelocity();
   }
 
   addDensity() {
@@ -258,14 +278,21 @@ export class FluidSimulator {
   }
 
   projectVelocity() {
+    this.projectDivergence();
+    this.projectJacobi();
+    this.projectPressure();
+  }
+
+  projectDivergence() {
     const device = this.device;
-    const pipeline = this.pipelines.projectPipeline;
+    const pipeline = this.pipelines.projectDivPipeline;
+
     const bindGroup = device.createBindGroup({
       label: "project bind group",
       layout: pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: this.velocity.textures.tex1 },
-        { binding: 1, resource: this.velocity.textures.tex2 },
+        { binding: 1, resource: this.project.tex1 },
       ],
     });
 
@@ -281,8 +308,62 @@ export class FluidSimulator {
     let commandBuffer = encoder.finish();
 
     device.queue.submit([commandBuffer]);
+  }
+  projectJacobi() {
+    const device = this.device;
+    const pipeline = this.pipelines.projectJacobiPipeline;
 
-    this.velocity.textures.swap();
+    for (let i = 0; i < 20; i++) {
+      const bindGroup = device.createBindGroup({
+        label: "project jacobi bind group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: this.project.tex1 },
+          { binding: 1, resource: this.project.tex2 },
+        ],
+      });
+
+      let encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
+      let computePass = encoder.beginComputePass();
+
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+
+      computePass.end();
+
+      let commandBuffer = encoder.finish();
+
+      device.queue.submit([commandBuffer]);
+      this.project.swap();
+    }
+  }
+
+  projectPressure() {
+    const device = this.device;
+    const pipeline = this.pipelines.projectPressurePipeline;
+    const bindGroup = device.createBindGroup({
+      label: "project pressure bind group",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: this.velocity.textures.tex2 },
+        { binding: 2, resource: this.project.tex1 },
+      ],
+    });
+
+    let encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
+    let computePass = encoder.beginComputePass();
+
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
+    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+
+    computePass.end();
+
+    let commandBuffer = encoder.finish();
+
+    device.queue.submit([commandBuffer]);
   }
 
   diffVelocityStep(dt: number) {
@@ -320,14 +401,29 @@ export class FluidSimulator {
 
   advectVelocityStep(dt: number) {
     const device = this.device;
-    const advPipeline = this.pipelines.velocityAdvectPipeline;
-    // const bindGroup = this.bindingGroups.velocityAdvectBindGroup;
+    const pipeline = this.pipelines.velocityAdvectPipeline;
+    const uniform = this.uniforms.density;
+
+    uniform.view[0] = config.DIFFUSION;
+    uniform.view[1] = dt;
+
+    device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
+
+    const bindGroup = device.createBindGroup({
+      label: "velocity advect bind broup",
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: this.velocity.textures.tex1 },
+        { binding: 1, resource: this.velocity.textures.tex2 },
+        { binding: 2, resource: uniform.buffer },
+      ],
+    });
 
     const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
     const computePass = encoder.beginComputePass();
 
-    computePass.setPipeline(advPipeline);
-    // computePass.setBindGroup(0, bindGroup);
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
 
     computePass.end();
@@ -338,8 +434,6 @@ export class FluidSimulator {
 
     this.velocity.textures.swap();
   }
-
-  projectStep(dt: number) {}
 
   advectStep(dt: number) {
     const device = this.device;
@@ -442,9 +536,12 @@ export class FluidSimulator {
     const h = config.TEXTURE_HEIGHT;
     const dyeData = initTextureData(w, h);
     const velocityData = initVelocityData(w, h);
+    const projectData = initProjectData(w, h);
 
     this.writeTexture(dyeData, this.dye.tex1, w, h);
     this.writeTexture(dyeData, this.dye.tex2, w, h);
+    this.writeTexture(projectData, this.project.tex1, w, h);
+    this.writeTexture(projectData, this.project.tex2, w, h);
     this.writeTexture(velocityData, this.velocity.textures.tex1, w, h);
     this.writeTexture(velocityData, this.velocity.textures.tex2, w, h);
   }
@@ -496,6 +593,7 @@ export class FluidSimulator {
 
   private reset = () => {
     this.velocity.data = [0, 0];
+    // this.mouse.velocity = [0, 0];
     this.mouseDown = false;
   };
 }

@@ -15,10 +15,6 @@ struct DensityStruct {
     let dt = densityInput.dt;
 
     let center = id.xy;
-    // let left = vec2u(min(center.x - 1, u32(dims.x)), center.y);
-    // let right = vec2u(min(center.x + 1, u32(dims.x)), center.y);
-    // let top = vec2u(center.x, min(center.y + 1, u32(dims.y)));
-    // let bottom = vec2u(center.x, center.y - 1);
     let left = vec2u(center.x - 1, center.y);
     let right = vec2u(center.x + 1, center.y);
     let top = vec2u(center.x, center.y + 1);
@@ -32,7 +28,7 @@ struct DensityStruct {
 
     //START SIM STEP
     let a = dt * diff * dims.x * dims.y;
-    let newDens = (densC.r + a * (densL.r + densR.r + densB.r + densT.r)) / (1 + 4 * a);
+    var newDens = (densC.r + a * (densL.r + densR.r + densB.r + densT.r)) / (1 + 4 * a);
 
-    textureStore(outputTexture, position, vec4f(newDens, newDens, newDens, 1));
+    textureStore(outputTexture, position, vec4f(newDens, 0, 0, 1));
 }

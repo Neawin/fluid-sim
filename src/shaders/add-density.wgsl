@@ -17,7 +17,7 @@ struct DensityUniform {
 
     let c = textureLoad(inputTexture, position, 0);
     let s = smoothstep(0.0, RADIUS, d);
-    let white = vec4f(1, 1, 1, 1);
+    let white = vec4f(1, 0, 0, 0.4);
 
     if d <= RADIUS {
         textureStore(outputTexture, position, mix(white, c, s));

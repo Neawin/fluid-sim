@@ -3,7 +3,9 @@ import diffusionModule from "./shaders/diffusion.wgsl";
 import advectModule from "./shaders/advect.wgsl";
 import velocityAdvectModule from "./shaders/velocity-advect.wgsl";
 import velocityDiffusionModule from "./shaders/velocity-diffusion.wgsl";
-import projectModule from "./shaders/project.wgsl";
+import projectDivModule from "./shaders/project-div.wgsl";
+import projectJacobi from "./shaders/project-jacobi.wgsl";
+import projectPressure from "./shaders/project-pressure.wgsl";
 import checkerBoardModule from "./shaders/checkerboard.wgsl";
 import velocityVectorModule from "./shaders/draw-velocity.wgsl";
 import densityModule from "./shaders/add-density.wgsl";
@@ -16,7 +18,9 @@ export interface IPipelines {
   advectPipeline: GPUComputePipeline;
   velocityAdvectPipeline: GPUComputePipeline;
   velocityDiffusionPipeline: GPUComputePipeline;
-  projectPipeline: GPUComputePipeline;
+  projectDivPipeline: GPUComputePipeline;
+  projectJacobiPipeline: GPUComputePipeline;
+  projectPressurePipeline: GPUComputePipeline;
   velocityVectorPipeline: GPURenderPipeline;
   densityPipeline: GPUComputePipeline;
   velocityPipeline: GPUComputePipeline;
@@ -167,10 +171,43 @@ export async function createVelocityDiffusionPipeline(device: GPUDevice) {
   const pipeline = device.createComputePipelineAsync(descriptor);
   return pipeline;
 }
-export async function createProjectPipeline(device: GPUDevice) {
+export async function createJacobiPipeline(device: GPUDevice) {
   const module = device.createShaderModule({
-    label: "project pipeline",
-    code: projectModule,
+    label: "project jacobi pipeline",
+    code: projectJacobi,
+  });
+
+  const descriptor: GPUComputePipelineDescriptor = {
+    layout: "auto",
+    compute: {
+      module,
+    },
+  };
+
+  const pipeline = await device.createComputePipelineAsync(descriptor);
+  return pipeline;
+}
+
+export async function createProjectDivPipeline(device: GPUDevice) {
+  const module = device.createShaderModule({
+    label: "project div pipeline",
+    code: projectDivModule,
+  });
+
+  const descriptor: GPUComputePipelineDescriptor = {
+    layout: "auto",
+    compute: {
+      module,
+    },
+  };
+
+  const pipeline = await device.createComputePipelineAsync(descriptor);
+  return pipeline;
+}
+export async function createProjectPressurePipeline(device: GPUDevice) {
+  const module = device.createShaderModule({
+    label: "project pressure pipeline",
+    code: projectPressure,
   });
 
   const descriptor: GPUComputePipelineDescriptor = {
@@ -240,7 +277,9 @@ export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
   const advectPipeline = await createAdvectPipeline(device);
   const velocityAdvectPipeline = await createVelocityAdvectPipeline(device);
   const velocityDiffusionPipeline = await createVelocityDiffusionPipeline(device);
-  const projectPipeline = await createProjectPipeline(device);
+  const projectDivPipeline = await createProjectDivPipeline(device);
+  const projectJacobiPipeline = await createJacobiPipeline(device);
+  const projectPressurePipeline = await createProjectPressurePipeline(device);
   const checkerboardPipeline = await createCheckerboardPipeline(device);
   const velocityVectorPipeline = await createVelocityVectorPipeline(device);
   const densityPipeline = await createDensityPipeline(device);
@@ -251,7 +290,9 @@ export async function createPipelines(device: GPUDevice): Promise<IPipelines> {
     advectPipeline,
     velocityAdvectPipeline,
     velocityDiffusionPipeline,
-    projectPipeline,
+    projectDivPipeline,
+    projectJacobiPipeline,
+    projectPressurePipeline,
     checkerboardPipeline,
     velocityVectorPipeline,
     densityPipeline,

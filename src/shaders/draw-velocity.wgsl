@@ -29,7 +29,7 @@ struct VertexOut {
     let cellY = floor(f32(vert.index) / dims.x);
 
     //-1 - 1
-    let velocity = vec2f(textureLoad(ourTexture, vec2u(u32(cellX), u32(cellY)), 0).xy) * 2 - 1;
+    let velocity = vec2f(textureLoad(ourTexture, vec2u(u32(cellX), u32(cellY)), 0).xy);
 
     let pos = array(
         vec2f(-1, 1),

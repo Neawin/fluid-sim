@@ -3,7 +3,7 @@ struct AdvectStruct {
     dt: f32}
 
 @group(0) @binding(0) var inputTexture: texture_2d<f32>;
-@group(0) @binding(1) var outputTexture: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(1) var outputTexture: texture_storage_2d<rgba8snorm, write>;
 @group(0) @binding(2) var<uniform> advInput: AdvectStruct;
 
 @compute @workgroup_size(1) fn computeVelocity(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -16,15 +16,15 @@ struct AdvectStruct {
     let diff = advInput.diff;
     let dt0 = dt * n;
 
-    let velX = vel.x - 0.5;
-    let velY = vel.y - 0.5;
+    let velX = vel.x;
+    let velY = vel.y;
 
     //advect step
     var x = f32(id.x) - dt0 * velX;
     var y = f32(id.y) - dt0 * velY;
 
-    x = clamp(x, 0.5, n + 0.5);
-    y = clamp(y, 0.5, n + 0.5);
+    x = clamp(x, 0.5, n - 1.5);
+    y = clamp(y, 0.5, n - 1.5);
 
     let i0 = floor(x);
     let j0 = floor(y);
@@ -43,7 +43,7 @@ struct AdvectStruct {
     let d3 = textureLoad(inputTexture, vec2u(u32(i1), u32(j0)), 0);
     let d4 = textureLoad(inputTexture, vec2u(u32(i1), u32(j1)), 0);
 
-    let d = s0 * (t0 * d1 + t1 * d2) + s1 * (t0 * d3 + t1 * d4);
+    let d = (s0 * (t0 * d1 + t1 * d2) + s1 * (t0 * d3 + t1 * d4));
 
     textureStore(outputTexture, position, vec4f(d.x, d.y, 0.0, 1.0));
 }

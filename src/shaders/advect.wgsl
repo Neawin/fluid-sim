@@ -2,29 +2,29 @@ struct AdvectStruct {
     dt: f32,
 }
 
-@group(0) @binding(0) var inputTexture: texture_2d<f32>;
-@group(0) @binding(1) var outputTexture: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(2) var velocityTexture: texture_2d<f32>;
+@group(0) @binding(0) var inDensity: texture_2d<f32>;
+@group(0) @binding(1) var outDensity: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var inVelocity: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> advInput: AdvectStruct;
 
 @compute @workgroup_size(1) fn computeVelocity(@builtin(global_invocation_id) id: vec3<u32>) {
     let position = id.xy;
-    let dims = vec2f(textureDimensions(inputTexture));
-    let vel = textureLoad(velocityTexture, position, 0);
+    let dims = vec2f(textureDimensions(inDensity));
+    let vel = textureLoad(inVelocity, position, 0);
     let n = dims.x;
 
     let dt = advInput.dt;
     let dt0 = dt * n;
 
-    let velX = vel.x - 0.5;
-    let velY = vel.y - 0.5;
+    let velX = vel.x;
+    let velY = vel.y;
 
     //advect step
     var x = f32(id.x) - dt0 * velX;
     var y = f32(id.y) - dt0 * velY;
 
-    x = clamp(x, 0.5, n + 0.5);
-    y = clamp(y, 0.5, n + 0.5);
+    x = clamp(x, 0.5, n - 0.5);
+    y = clamp(y, 0.5, n - 0.5);
 
     let i0 = floor(x);
     let j0 = floor(y);
@@ -38,12 +38,13 @@ struct AdvectStruct {
     let t1 = y - j0;
     let t0 = 1 - t1;
 
-    let d1 = textureLoad(inputTexture, vec2u(u32(i0), u32(j0)), 0);
-    let d2 = textureLoad(inputTexture, vec2u(u32(i0), u32(j1)), 0);
-    let d3 = textureLoad(inputTexture, vec2u(u32(i1), u32(j0)), 0);
-    let d4 = textureLoad(inputTexture, vec2u(u32(i1), u32(j1)), 0);
+    let d1 = textureLoad(inDensity, vec2u(u32(i0), u32(j0)), 0);
+    let d2 = textureLoad(inDensity, vec2u(u32(i0), u32(j1)), 0);
+    let d3 = textureLoad(inDensity, vec2u(u32(i1), u32(j0)), 0);
+    let d4 = textureLoad(inDensity, vec2u(u32(i1), u32(j1)), 0);
 
     let d = s0 * (t0 * d1 + t1 * d2) + s1 * (t0 * d3 + t1 * d4);
 
-    textureStore(outputTexture, position, vec4f(d.r, d.r, d.r, 1.0));
+    // textureStore(outDensity, position, vec4f(d.r, d.r, d.r, 1));
+    textureStore(outDensity, position, vec4f(d.r, 0, 0, 0.4));
 }
