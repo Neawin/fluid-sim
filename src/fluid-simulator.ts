@@ -508,7 +508,7 @@ export class FluidSimulator {
     const h = config.TEXTURE_HEIGHT;
     const device = this.device;
 
-    const { tex1, tex2 } = this.velocity.textures;
+    const { tex1 } = this.velocity.textures;
     const data = initVelocityData(w, h);
     const view = new Float32Array(data.flat());
 
