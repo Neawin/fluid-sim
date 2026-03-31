@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  base: "/fluid-sim/",
   plugins: [
     {
       name: "wgsl-as-string",
