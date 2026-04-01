@@ -4,6 +4,7 @@ import { mouseVelocityListener } from "./mouse";
 import { createPipelines, type IPipelines } from "./pipelines";
 import { createDoubleTexture, initProjectData, initTextureData, initVelocityData } from "./texture";
 import { calcDeltaTime } from "./utils";
+import * as dat from "dat.gui";
 
 export class FluidSimulator {
   device!: GPUDevice;
@@ -13,6 +14,7 @@ export class FluidSimulator {
   renderPassDescriptor!: GPURenderPassDescriptor;
   streamer!: any;
   sampler!: GPUSampler;
+  config = config;
   uniforms!: {
     advect: IBuffer;
     diffuse: IBuffer;
@@ -52,7 +54,6 @@ export class FluidSimulator {
     sim.dye = createDoubleTexture(sim.device, "rgba8unorm");
     sim.project = createDoubleTexture(sim.device, "rgba8snorm");
     sim.sampler = sim.device.createSampler();
-    sim.writeVelocityTexture();
     mouseVelocityListener(sim.reset, sim.size).subscribe(({ position, velocity }) => {
       sim.velocity.data = velocity;
       sim.mouse = {
@@ -64,6 +65,23 @@ export class FluidSimulator {
     sim.writeTextures();
     requestAnimationFrame(sim.step);
 
+    const gui = new dat.GUI();
+
+    gui.add(sim.config, "GRID_SIM", [32, 64, 128, 256, 512]).onChange(() => {
+      sim.velocity = {
+        textures: createDoubleTexture(sim.device, "rgba8snorm"),
+        data: [0, 0],
+      };
+      sim.dye = createDoubleTexture(sim.device, "rgba8unorm");
+      sim.project = createDoubleTexture(sim.device, "rgba8snorm");
+      sim.writeTextures();
+    });
+    gui.add(sim.config, "DIFFUSION", 0);
+    gui.add(sim.config, "VISCOSITY", 0);
+    gui.add(sim.config, "RADIUS", 1);
+    const container = document.querySelector(".container");
+    container?.appendChild(gui.domElement);
+    gui.domElement.classList.add("gui");
     return sim;
   }
   // step = (now: number) => {
@@ -126,6 +144,7 @@ export class FluidSimulator {
 
     uniform.view[0] = mousePos[0];
     uniform.view[1] = mousePos[1];
+    uniform.view[2] = this.config.RADIUS;
 
     this.device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
     const bindGroup = device.createBindGroup({
@@ -143,7 +162,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
     computePass.end();
 
     let commandBuffer = encoder.finish();
@@ -156,7 +175,7 @@ export class FluidSimulator {
     const pipeline = this.pipelines.diffusionPipeline;
     const uniform = this.uniforms.diffuse;
 
-    uniform.view[0] = config.DIFFUSION;
+    uniform.view[0] = this.config.DIFFUSION;
     uniform.view[1] = dt;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
 
@@ -175,7 +194,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
     computePass.end();
 
     const commandBuffer = encoder.finish();
@@ -205,7 +224,7 @@ export class FluidSimulator {
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.draw(6, config.TEXTURE_WIDTH * config.TEXTURE_HEIGHT);
+    pass.draw(6, this.config.GRID_SIM * this.config.GRID_SIM);
     pass.end();
 
     const commandBuffer = encoder.finish();
@@ -222,8 +241,8 @@ export class FluidSimulator {
       layout: pipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: uniform.buffer }],
     });
-    const cellWidth = this.size.width / config.TEXTURE_WIDTH;
-    const cellHeight = this.size.height / config.TEXTURE_HEIGHT;
+    const cellWidth = this.size.width / this.config.GRID_SIM;
+    const cellHeight = this.size.height / this.config.GRID_SIM;
     uniform.view[0] = cellWidth;
     uniform.view[1] = cellHeight;
 
@@ -251,6 +270,7 @@ export class FluidSimulator {
     uniform.view[1] = mouseVelocity[1];
     uniform.view[2] = mousePos[0];
     uniform.view[3] = mousePos[1];
+    uniform.view[4] = this.config.RADIUS;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
 
     const bindGroup = device.createBindGroup({
@@ -268,7 +288,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
     computePass.end();
 
@@ -301,7 +321,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
     computePass.end();
 
@@ -328,7 +348,7 @@ export class FluidSimulator {
 
       computePass.setPipeline(pipeline);
       computePass.setBindGroup(0, bindGroup);
-      computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+      computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
       computePass.end();
 
@@ -357,7 +377,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
     computePass.end();
 
@@ -371,7 +391,7 @@ export class FluidSimulator {
     const pipeline = this.pipelines.velocityDiffusionPipeline;
     const uniform = this.uniforms.velocity;
 
-    uniform.view[0] = config.VISCOSITY;
+    uniform.view[0] = this.config.VISCOSITY;
     uniform.view[1] = dt;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
 
@@ -390,7 +410,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
     computePass.end();
 
@@ -404,7 +424,7 @@ export class FluidSimulator {
     const pipeline = this.pipelines.velocityAdvectPipeline;
     const uniform = this.uniforms.density;
 
-    uniform.view[0] = config.DIFFUSION;
+    uniform.view[0] = this.config.DIFFUSION;
     uniform.view[1] = dt;
 
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
@@ -424,7 +444,7 @@ export class FluidSimulator {
 
     computePass.setPipeline(pipeline);
     computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+    computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
     computePass.end();
 
@@ -443,29 +463,31 @@ export class FluidSimulator {
     uniform.view[0] = dt;
     device.queue.writeBuffer(uniform.buffer, 0, uniform.data);
 
-    const bindGroup = this.device.createBindGroup({
-      label: "advect bind group",
-      layout: pipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: this.dye.tex1 },
-        { binding: 1, resource: this.dye.tex2 },
-        { binding: 2, resource: this.velocity.textures.tex1 },
-        { binding: 3, resource: uniform.buffer },
-      ],
-    });
+    for (let i = 0; i < 20; i++) {
+      const bindGroup = this.device.createBindGroup({
+        label: "advect bind group",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: this.dye.tex1 },
+          { binding: 1, resource: this.dye.tex2 },
+          { binding: 2, resource: this.velocity.textures.tex1 },
+          { binding: 3, resource: uniform.buffer },
+        ],
+      });
 
-    const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
-    const computePass = encoder.beginComputePass();
+      const encoder = device.createCommandEncoder({ label: "compute diffusion encoder" });
+      const computePass = encoder.beginComputePass();
 
-    computePass.setPipeline(pipeline);
-    computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(config.TEXTURE_WIDTH, config.TEXTURE_HEIGHT, 1);
+      computePass.setPipeline(pipeline);
+      computePass.setBindGroup(0, bindGroup);
+      computePass.dispatchWorkgroups(this.config.GRID_SIM, this.config.GRID_SIM, 1);
 
-    computePass.end();
+      computePass.end();
 
-    const commandBuffer = encoder.finish();
+      const commandBuffer = encoder.finish();
 
-    device.queue.submit([commandBuffer]);
+      device.queue.submit([commandBuffer]);
+    }
   }
 
   renderQuad() {
@@ -495,17 +517,17 @@ export class FluidSimulator {
     this.uniforms = {
       advect: this.createUniformBuffer("advect uniform buffer", 2 * 4),
       diffuse: this.createUniformBuffer("diffusion uniform buffer", 2 * 4),
-      density: this.createUniformBuffer("density uniform buffer", 2 * 4),
+      density: this.createUniformBuffer("density uniform buffer", 4 * 4),
       velocity: this.createUniformBuffer("velocity uniform buffer", 2 * 4),
       velocityField: this.createUniformBuffer("velocity field uniform buffer", 2 * 4),
       checkerboard: this.createUniformBuffer("checkerboard uniform buffer", 2 * 4),
-      mousePos: this.createUniformBuffer("mouse pos uniform buffer", 4 * 4),
+      mousePos: this.createUniformBuffer("mouse pos uniform buffer", 6 * 4),
     };
   }
 
   writeVelocityTexture() {
-    const w = config.TEXTURE_WIDTH;
-    const h = config.TEXTURE_HEIGHT;
+    const w = this.config.GRID_SIM;
+    const h = this.config.GRID_SIM;
     const device = this.device;
 
     const { tex1 } = this.velocity.textures;
@@ -532,8 +554,8 @@ export class FluidSimulator {
   }
 
   writeTextures() {
-    const w = config.TEXTURE_WIDTH;
-    const h = config.TEXTURE_HEIGHT;
+    const w = this.config.GRID_SIM;
+    const h = this.config.GRID_SIM;
     const dyeData = initTextureData(w, h);
     const velocityData = initVelocityData(w, h);
     const projectData = initProjectData(w, h);

@@ -46,8 +46,8 @@ export function createTexture(label: string, device: GPUDevice, width: number, h
 }
 
 export function createDoubleTexture(device: GPUDevice, format: GPUTextureFormat): IDoubleTexture {
-  const textureWidth = config.TEXTURE_WIDTH;
-  const textureHeight = config.TEXTURE_HEIGHT;
+  const textureWidth = config.GRID_SIM;
+  const textureHeight = config.GRID_SIM;
 
   let tex1 = createTexture("tex1", device, textureWidth, textureHeight, format);
   let tex2 = createTexture("tex2", device, textureWidth, textureHeight, format);

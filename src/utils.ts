@@ -15,7 +15,7 @@ export function getVelocity(e: MouseEvent) {
   prevX = x;
   prevY = y;
 
-  const force = 400;
+  const force = 100;
 
   const height = document.documentElement.clientHeight;
   const width = document.documentElement.clientWidth;

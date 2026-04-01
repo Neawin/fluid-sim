@@ -12,9 +12,14 @@ html {
 }
 
 canvas {
+  position: absolute;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+container {
+  position: relative;
 }
 
 svg {
@@ -22,4 +27,11 @@ svg {
   inset: 0;
   z-index: 20;
   display: block;
+}
+
+.gui {
+  position: absolute;
+  top: 0em;
+  right: 0em;
+  z-index: 2000;
 }

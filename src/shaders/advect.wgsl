@@ -45,6 +45,5 @@ struct AdvectStruct {
 
     let d = s0 * (t0 * d1 + t1 * d2) + s1 * (t0 * d3 + t1 * d4);
 
-    // textureStore(outDensity, position, vec4f(d.r, d.r, d.r, 1));
-    textureStore(outDensity, position, vec4f(d.r, 0, 0, 0.4));
+    textureStore(outDensity, position, vec4f(d.r, d.r, d.r, 1));
 }

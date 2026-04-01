@@ -1,8 +1,8 @@
-const RADIUS = 20;
 
 struct VelocityUniform {
     delta: vec2f,
     position: vec2f,
+    radius: f32,
 }
 
 @group(0) @binding(0) var inVelocity: texture_2d<f32>;
@@ -13,6 +13,7 @@ struct VelocityUniform {
     let position = id.xy;
     let dims = vec2f(textureDimensions(inVelocity));
     let delta = velUniform.delta;
+    let RADIUS = velUniform.radius;
 
     let pos = velUniform.position * dims;
 

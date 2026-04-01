@@ -1,7 +1,6 @@
-const RADIUS = 20;
-
 struct DensityUniform {
     mousePos: vec2f,
+    radius: f32,
 }
 
 @group(0) @binding(0) var inputTexture: texture_2d<f32>;
@@ -12,6 +11,7 @@ struct DensityUniform {
     let position = id.xy;
     let dims = vec2f(textureDimensions(inputTexture));
     let pos = densUniform.mousePos * dims;
+    let RADIUS = densUniform.radius;
 
     let d = distance(pos, vec2f(position));
 
