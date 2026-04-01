@@ -2,6 +2,9 @@
 
 Fluid simulation using webgpu shaders
 
+
+[Live Demo](https://neawin.github.io/fluid-sim/)
+
 # References
 [Real-Time Fluid Dynamics for Games Jos Stam](https://graphics.cs.cmu.edu/nsp/course/15-464/Fall09/papers/StamFluidforGames.pdf)
 
